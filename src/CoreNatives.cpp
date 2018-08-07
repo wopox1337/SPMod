@@ -25,7 +25,7 @@ static cell_t PrintToServer(SourcePawn::IPluginContext *ctx,
     char bufferOutput[1024];
 
     ctx->LocalToString(params[1], &formatString);
-    size_t res = gSPGlobal->formatString(bufferOutput, sizeof(bufferOutput)-2, formatString, ctx, params, 2);
+    std::size_t res = gSPGlobal->formatString(bufferOutput, sizeof(bufferOutput)-2, formatString, ctx, params, 2);
   
     bufferOutput[res++] = '\n';
     bufferOutput[res] = '\0';
@@ -155,7 +155,7 @@ static cell_t NativeGetString(SourcePawn::IPluginContext *ctx,
     char *stringToCopy;
     NativeMngr::m_callerPlugin->LocalToString(NativeMngr::m_callerParams[param], &stringToCopy);
 
-    size_t writtenBytes;
+    std::size_t writtenBytes;
     ctx->StringToLocalUTF8(params[2], params[3], stringToCopy, &writtenBytes);
 
     return writtenBytes;
@@ -228,7 +228,7 @@ static cell_t NativeSetString(SourcePawn::IPluginContext *ctx,
     char *stringToCopy;
     ctx->LocalToString(params[2], &stringToCopy);
 
-    size_t writtenBytes;
+    std::size_t writtenBytes;
     NativeMngr::m_callerPlugin->StringToLocalUTF8(NativeMngr::m_callerParams[param],
                                                   params[3],
                                                   stringToCopy,
@@ -264,7 +264,7 @@ static cell_t NativeSetArray(SourcePawn::IPluginContext *ctx,
 
 // void ChangeLevel(const char[] map)
 static cell_t ChangeLevel(SourcePawn::IPluginContext *ctx,
-                                  const cell_t *params)
+                          const cell_t *params)
 {
     enum { arg_map = 1 };
 
@@ -277,9 +277,37 @@ static cell_t ChangeLevel(SourcePawn::IPluginContext *ctx,
 
 // float GetGameTime() 
 static cell_t GetGameTime(SourcePawn::IPluginContext *ctx [[maybe_unused]], 
-                                  const cell_t *params [[maybe_unused]])
+                          const cell_t *params [[maybe_unused]])
 {
     return sp_ftoc(gpGlobals->time);
+}
+
+// native void ServerCmd(const char[] command, any ...)
+static cell_t ServerCmd(SourcePawn::IPluginContext *ctx,
+                        const cell_t *params)
+{
+    enum { arg_buffer = 1, arg_params };
+
+    char *formatString;
+    char bufferOutput[1024];
+
+    ctx->LocalToString(params[arg_buffer], &formatString);
+    std::size_t res = gSPGlobal->formatString(bufferOutput, sizeof(bufferOutput)-2, formatString, ctx, params, arg_params);
+  
+    bufferOutput[res++] = '\n';
+    bufferOutput[res] = '\0';
+  
+    SERVER_COMMAND(bufferOutput);
+
+    return 1;
+}
+
+// native void ServerExec()
+static cell_t ServerExec(SourcePawn::IPluginContext *ctx [[maybe_unused]],
+                         const cell_t *params [[maybe_unused]])
+{
+    SERVER_EXECUTE();
+    return 1;
 }
 
 sp_nativeinfo_t gCoreNatives[] =
@@ -298,5 +326,7 @@ sp_nativeinfo_t gCoreNatives[] =
     {  "NativeSetArray",         NativeSetArray      },
     {  "ChangeLevel",            ChangeLevel         },
     {  "GetGameTime",            GetGameTime         },
+    {  "ServerCmd",              ServerCmd           },
+    {  "ServerExec",             ServerExec          },
     {  nullptr,                  nullptr             }
 };

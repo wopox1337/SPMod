@@ -29,52 +29,46 @@ static void SV_DropClientHook(IRehldsHook_SV_DropClient *chain,
                               const char *string)
 {
     using def = ForwardMngr::FwdDefault;
-    std::shared_ptr<Forward> forward = gSPGlobal->getForwardManagerCore()->getDefaultForward(def::ClientDisconnect);
 
-    forward->pushCell(ENTINDEX(client->GetEdict()));
+    const std::unique_ptr<PlayerMngr> &plrMngr = gSPGlobal->getPlayerManagerCore();
+    std::shared_ptr<Player> plr = plrMngr->getPlayerCore(client->GetEdict());
+
+    // callback for modules
+    for (auto *listener : plrMngr->getListenerList())
+    {
+        listener->OnClientDisconnect(plr.get(), crash, string);
+    }
+
+    std::shared_ptr<Forward> forward = gSPGlobal->getForwardManagerCore()->getDefaultForward(def::ClientDisconnect);
+    forward->pushCell(plr->getIndex());
     forward->pushCell(crash);
     forward->pushString(string);
     forward->execFunc(nullptr);
 
     chain->callNext(client, crash, string);
+
+    PlayerMngr::m_playersNum--;
+    plr->disconnect();
+
+    // callback for modules
+    for (auto *listener : plrMngr->getListenerList())
+    {
+        listener->OnClientDisconnected(plr.get(), crash, string);
+    }
+
+    //TODO: Add OnClientDisconnected(int client, bool crash, const char[] string) for plugins?
 }
 
 static void Cvar_DirectSetHook(IRehldsHook_Cvar_DirectSet *chain,
                                cvar_t *cvar,
                                const char *value)
 {
-    using def = ForwardMngr::FwdDefault;
-
-    // If value of cvar is the same, do not execute forward
-    if (!strcmp(cvar->string, value))
+    auto cachedCvar = gSPGlobal->getCvarManagerCore()->findCvarCore(cvar->name, true);
+    // If cached cvar is the same, do not update cached value
+    if (cachedCvar && cachedCvar->asStringCore().compare(value))
     {
-        chain->callNext(cvar, value);
-        return;
+        cachedCvar->setValue(value);
     }
-
-    std::shared_ptr<Forward> forward = gSPGlobal->getForwardManagerCore()->getDefaultForward(def::CvarChange);
-    if (!forward)
-    {
-        chain->callNext(cvar, value);
-        return;
-    }
-
-    forward->pushString(cvar->name);
-    forward->pushString(cvar->string);
-    forward->pushString(value);
-
-    float valueFl;
-    try
-    {
-        valueFl = std::stof(value);
-    }
-    catch (const std::exception &e [[maybe_unused]])
-    {
-        valueFl = 0.0f;
-    }
-
-    forward->pushFloat(valueFl);
-    forward->execFunc(nullptr);
 
     chain->callNext(cvar, value);
 }
